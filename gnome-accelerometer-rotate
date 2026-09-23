@@ -3,6 +3,8 @@ set -u
 
 LOCK_SCHEMA='org.gnome.settings-daemon.peripherals.touchscreen'
 LOCK_KEY='orientation-lock'
+OSK_SCHEMA='org.gnome.desktop.a11y.applications'
+OSK_KEY='screen-keyboard-enabled'
 BUILTIN='eDP-1'
 
 log() {
@@ -52,6 +54,45 @@ current_transform() {
                 exit
             }
         '
+}
+
+external_keyboard_present() {
+    local dev props bus
+
+    for dev in /dev/input/event*; do
+        props="$(udevadm info --query=property --name="$dev" 2>/dev/null)" ||
+            continue
+
+        grep -qx 'ID_INPUT_KEYBOARD=1' <<<"$props" || continue
+
+        bus="$(sed -n 's/^ID_BUS=//p' <<<"$props" | head -n1)"
+
+        if [[ -n "$bus" && "$bus" != "i8042" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+sync_osk() {
+    local transform current desired=false
+
+    transform="$(current_transform)"
+
+    if [[ -n "$transform" && "$transform" != "normal" ]] &&
+       ! external_keyboard_present; then
+        desired=true
+    fi
+
+    current="$(gsettings get "$OSK_SCHEMA" "$OSK_KEY")"
+
+    if [[ "$current" == "$desired" ]]; then
+        return
+    fi
+
+    gsettings set "$OSK_SCHEMA" "$OSK_KEY" "$desired"
+    log "screen keyboard enabled=$desired transform=${transform:-unknown}"
 }
 
 apply_transform() {
@@ -163,11 +204,13 @@ sync_orientation() {
 
     if [[ "$current" == "$desired" ]]; then
         log "already synchronized"
+        sync_osk
         return
     fi
 
     if apply_transform "$desired"; then
         log "rotated to $desired"
+        sync_osk
     else
         log "ERROR: gdctl failed to apply transform"
     fi
@@ -198,9 +241,21 @@ lock_watch() {
         done
 }
 
+keyboard_watch() {
+    udevadm monitor --udev --subsystem-match=input 2>/dev/null |
+        while IFS= read -r line; do
+            case "$line" in
+                *" add "*|*" remove "*)
+                    sync_osk
+                    ;;
+            esac
+        done
+}
+
 cleanup() {
     [[ -n "${sensor_pid:-}" ]] && kill "$sensor_pid" 2>/dev/null || true
     [[ -n "${lock_pid:-}" ]] && kill "$lock_pid" 2>/dev/null || true
+    [[ -n "${keyboard_pid:-}" ]] && kill "$keyboard_pid" 2>/dev/null || true
 }
 
 trap cleanup EXIT INT TERM
@@ -210,6 +265,8 @@ log "initial orientation-lock=$(gsettings get "$LOCK_SCHEMA" "$LOCK_KEY")"
 
 if ! is_locked; then
     sync_orientation
+else
+    sync_osk
 fi
 
 sensor_watch &
@@ -217,5 +274,8 @@ sensor_pid=$!
 
 lock_watch &
 lock_pid=$!
+
+keyboard_watch &
+keyboard_pid=$!
 
 wait
