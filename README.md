@@ -50,21 +50,21 @@ cd gnome-accelerometer-rotate
 
 The installer copies:
 
-- `yoga-auto-rotate` to `~/.local/bin/yoga-auto-rotate`
-- `yoga-auto-rotate.service` to `~/.config/systemd/user/yoga-auto-rotate.service`
+- `gnome-accelerometer-rotate` to `~/.local/bin/gnome-accelerometer-rotate`
+- `gnome-accelerometer-rotate.service` to `~/.config/systemd/user/gnome-accelerometer-rotate.service`
 
 It then enables and starts the user service.
 
 Check its status with:
 
 ```console
-systemctl --user status yoga-auto-rotate.service
+systemctl --user status gnome-accelerometer-rotate.service
 ```
 
 View recent logs with:
 
 ```console
-journalctl --user -u yoga-auto-rotate.service
+journalctl --user -u gnome-accelerometer-rotate.service
 ```
 
 ## Behavior
@@ -111,7 +111,7 @@ gdctl show
 
 ## Limitations
 
-The built-in display connector is currently expected to be named `eDP-1`. Systems using a different connector name need to change `BUILTIN` near the top of `yoga-auto-rotate`.
+The built-in display connector is currently expected to be named `eDP-1`. Systems using a different connector name need to change `BUILTIN` near the top of `gnome-accelerometer-rotate`.
 
 The `gdctl show` output is parsed to preserve the active logical-monitor configuration. The script therefore targets current GNOME versions that provide `gdctl`; it is not intended as a general Wayland display-rotation utility.
 
@@ -122,9 +122,9 @@ Unlock synchronization starts a short-lived `monitor-sensor` process to obtain t
 Disable the service and remove the installed files:
 
 ```console
-systemctl --user disable --now yoga-auto-rotate.service
-rm -f ~/.config/systemd/user/yoga-auto-rotate.service
-rm -f ~/.local/bin/yoga-auto-rotate
+systemctl --user disable --now gnome-accelerometer-rotate.service
+rm -f ~/.config/systemd/user/gnome-accelerometer-rotate.service
+rm -f ~/.local/bin/gnome-accelerometer-rotate
 systemctl --user daemon-reload
 ```
 
