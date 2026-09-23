@@ -1,10 +1,12 @@
 # gnome-accelerometer-rotate
 
-Automatic screen rotation for GNOME on Wayland using `iio-sensor-proxy`, with support for GNOME's existing rotation lock.
+Automatic screen rotation for GNOME on Wayland using `iio-sensor-proxy`, with support for GNOME's existing rotation lock and on-screen keyboard.
 
 This is a small workaround for convertible laptops where the accelerometer works but GNOME does not enable automatic panel rotation. A common symptom is that `monitor-sensor` reports valid orientation changes while Mutter's `PanelOrientationManaged` property remains `false`.
 
 The service listens for accelerometer orientation changes and applies the corresponding transform to the built-in display with GNOME's `gdctl`. It also watches GNOME's `orientation-lock` setting, so an existing rotation-lock key or button continues to work normally.
+
+Because systems affected by this problem may also lack usable tablet-mode detection, the service can manage GNOME's built-in on-screen keyboard. It enables the keyboard when the built-in display is rotated away from its normal orientation and no external keyboard is present, and disables it otherwise.
 
 ## Tested hardware
 
@@ -16,6 +18,7 @@ On this machine:
 - GNOME's `orientation-lock` setting is toggled by the laptop's physical rotation-lock button.
 - Linux exposes the normal lid switch but no `SW_TABLET_MODE` input switch.
 - Mutter reports `PanelOrientationManaged = false`, so GNOME does not automatically rotate the built-in panel despite receiving valid sensor data.
+- The built-in keyboard is classified by udev on the `i8042` bus, while tested external USB keyboards are independently classified with `ID_INPUT_KEYBOARD=1`.
 
 The workaround does not attempt to infer hinge or tablet mode. Rotation follows the accelerometer whenever GNOME's rotation lock is disabled. On hardware without usable tablet-mode detection, keeping rotation locked during ordinary laptop use is recommended.
 
@@ -25,6 +28,7 @@ The workaround does not attempt to infer hinge or tablet mode. Rotation follows 
 - `iio-sensor-proxy` / `monitor-sensor`
 - `gdctl`
 - `gsettings`
+- `udevadm`
 - systemd user services
 - Bash, awk, sed, and coreutils
 
@@ -84,12 +88,32 @@ When rotation is locked, orientation events are ignored. When rotation changes f
 
 The service reconstructs the current `gdctl` logical-monitor configuration and changes only the transform of the built-in `eDP-1` display. This allows the current scale, position, primary-display state, and attached external displays to be retained while the internal panel rotates.
 
+### On-screen keyboard
+
+The same service manages GNOME's `org.gnome.desktop.a11y.applications screen-keyboard-enabled` setting according to the current display transform and keyboard state:
+
+| Built-in display | External keyboard | On-screen keyboard |
+| --- | --- | --- |
+| `normal` | absent or present | disabled |
+| `90`, `180`, or `270` | absent | enabled |
+| `90`, `180`, or `270` | present | disabled |
+
+External keyboards are discovered from udev input-device properties. A device with `ID_INPUT_KEYBOARD=1` on a bus other than `i8042` is treated as external. The service listens for udev input add/remove events and reevaluates the setting when devices are connected or disconnected; it does not poll for keyboard state.
+
+This heuristic is intended for convertible PCs whose built-in keyboard is exposed through `i8042`. Systems with a differently connected internal keyboard may require a different distinction between internal and external input devices.
+
 ## Diagnostics
 
 Check GNOME's rotation lock:
 
 ```console
 gsettings get org.gnome.settings-daemon.peripherals.touchscreen orientation-lock
+```
+
+Check GNOME's on-screen keyboard setting:
+
+```console
+gsettings get org.gnome.desktop.a11y.applications screen-keyboard-enabled
 ```
 
 Check whether Mutter considers panel orientation managed:
@@ -109,6 +133,15 @@ Inspect the display configuration:
 gdctl show
 ```
 
+Inspect udev's keyboard classification:
+
+```console
+for dev in /dev/input/event*; do
+    udevadm info --query=property --name="$dev" 2>/dev/null |
+        grep -E '^(ID_INPUT_KEYBOARD|ID_BUS)=' || true
+done
+```
+
 ## Limitations
 
 The built-in display connector is currently expected to be named `eDP-1`. Systems using a different connector name need to change `BUILTIN` near the top of `gnome-accelerometer-rotate`.
@@ -116,6 +149,8 @@ The built-in display connector is currently expected to be named `eDP-1`. System
 The `gdctl show` output is parsed to preserve the active logical-monitor configuration. The script therefore targets current GNOME versions that provide `gdctl`; it is not intended as a general Wayland display-rotation utility.
 
 Unlock synchronization starts a short-lived `monitor-sensor` process to obtain the current orientation. This can be slower than ordinary rotation events, which use the orientation already delivered by the persistent sensor watcher.
+
+On-screen keyboard management assumes the built-in keyboard uses the `i8042` bus. Other hardware layouts may need to adjust the external-keyboard heuristic.
 
 ## Uninstall
 
@@ -126,6 +161,12 @@ systemctl --user disable --now gnome-accelerometer-rotate.service
 rm -f ~/.config/systemd/user/gnome-accelerometer-rotate.service
 rm -f ~/.local/bin/gnome-accelerometer-rotate
 systemctl --user daemon-reload
+```
+
+The service changes GNOME's on-screen keyboard preference while it runs. After uninstalling, set that preference to whichever state you prefer, for example:
+
+```console
+gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled false
 ```
 
 ## License
