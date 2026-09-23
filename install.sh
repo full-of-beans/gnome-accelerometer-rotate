@@ -6,7 +6,7 @@ BIN_DIR="${HOME}/.local/bin"
 UNIT_DIR="${HOME}/.config/systemd/user"
 NAME='gnome-accelerometer-rotate'
 
-for command in gdctl gsettings monitor-sensor systemctl; do
+for command in gdctl gsettings monitor-sensor systemctl udevadm; do
     if ! command -v "$command" >/dev/null 2>&1; then
         printf 'Missing required command: %s\n' "$command" >&2
         exit 1
