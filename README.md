@@ -57,7 +57,7 @@ The installer copies:
 - `gnome-accelerometer-rotate` to `~/.local/bin/gnome-accelerometer-rotate`
 - `gnome-accelerometer-rotate.service` to `~/.config/systemd/user/gnome-accelerometer-rotate.service`
 
-It then enables and starts the user service.
+It then enables and starts the user service. The installer also checks for a keyboard on the default `i8042` internal-keyboard bus. If none is found, installation continues with a warning so the hardware-specific setting can be adjusted manually.
 
 Check its status with:
 
@@ -98,9 +98,16 @@ The same service manages GNOME's `org.gnome.desktop.a11y.applications screen-key
 | `90`, `180`, or `270` | absent | enabled |
 | `90`, `180`, or `270` | present | disabled |
 
-External keyboards are discovered from udev input-device properties. A device with `ID_INPUT_KEYBOARD=1` on a bus other than `i8042` is treated as external. The service listens for udev input add/remove events and reevaluates the setting when devices are connected or disconnected; it does not poll for keyboard state.
+External keyboards are discovered from udev input-device properties. A device with `ID_INPUT_KEYBOARD=1` on a bus other than `INTERNAL_KEYBOARD_BUS` is treated as external. The default internal bus is `i8042`. The service listens for udev input add/remove events and reevaluates the setting when devices are connected or disconnected; it does not poll for keyboard state.
 
-This heuristic is intended for convertible PCs whose built-in keyboard is exposed through `i8042`. Systems with a differently connected internal keyboard may require a different distinction between internal and external input devices.
+The hardware-specific defaults are grouped near the top of `gnome-accelerometer-rotate`:
+
+```bash
+BUILTIN='eDP-1'
+INTERNAL_KEYBOARD_BUS='i8042'
+```
+
+Systems using a different built-in display connector or internal-keyboard bus can change those values directly.
 
 ## Diagnostics
 
@@ -144,13 +151,11 @@ done
 
 ## Limitations
 
-The built-in display connector is currently expected to be named `eDP-1`. Systems using a different connector name need to change `BUILTIN` near the top of `gnome-accelerometer-rotate`.
+The built-in display connector defaults to `eDP-1`, and the internal keyboard bus defaults to `i8042`. Systems using different hardware identifiers need to change `BUILTIN` or `INTERNAL_KEYBOARD_BUS` near the top of `gnome-accelerometer-rotate`.
 
 The `gdctl show` output is parsed to preserve the active logical-monitor configuration. The script therefore targets current GNOME versions that provide `gdctl`; it is not intended as a general Wayland display-rotation utility.
 
 Unlock synchronization starts a short-lived `monitor-sensor` process to obtain the current orientation. This can be slower than ordinary rotation events, which use the orientation already delivered by the persistent sensor watcher.
-
-On-screen keyboard management assumes the built-in keyboard uses the `i8042` bus. Other hardware layouts may need to adjust the external-keyboard heuristic.
 
 ## Uninstall
 
