@@ -5,7 +5,10 @@ LOCK_SCHEMA='org.gnome.settings-daemon.peripherals.touchscreen'
 LOCK_KEY='orientation-lock'
 OSK_SCHEMA='org.gnome.desktop.a11y.applications'
 OSK_KEY='screen-keyboard-enabled'
+
+# Hardware-specific defaults
 BUILTIN='eDP-1'
+INTERNAL_KEYBOARD_BUS='i8042'
 
 log() {
     printf '[gnome-accelerometer-rotate] %s\n' "$*"
@@ -67,7 +70,7 @@ external_keyboard_present() {
 
         bus="$(sed -n 's/^ID_BUS=//p' <<<"$props" | head -n1)"
 
-        if [[ -n "$bus" && "$bus" != "i8042" ]]; then
+        if [[ -n "$bus" && "$bus" != "$INTERNAL_KEYBOARD_BUS" ]]; then
             return 0
         fi
     done
